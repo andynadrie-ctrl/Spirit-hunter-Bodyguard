@@ -1,3 +1,4 @@
+
 import pygame
 
 pygame.init()
@@ -21,8 +22,6 @@ original_background = pygame.image.load(
     "assets/backgrounds/back4 town.png"
 ).convert()
 
-
-# How zoomed the world should be
 ZOOM = 1.5
 
 
@@ -35,24 +34,100 @@ idle_frames = []
 for i in range(0, 10):
 
     image = pygame.image.load(
-        f"assets/Character/idle/0{i}.png"
+        f"assets/Character/idle/{i:02d}.png"
     ).convert_alpha()
 
-    # Bigger character
-    image = pygame.transform.scale(
-        image,
-        (150, 150)
-    )
+    image = pygame.transform.scale(image, (170, 170))
 
     idle_frames.append(image)
 
 
-# Current animation frame
 current_frame = 0
-
-# Animation speed
 animation_speed = 150
 last_update = pygame.time.get_ticks()
+
+
+# ==================================================
+# IDLE ANIMATION TIMING
+# ==================================================
+
+idle_intro_start = pygame.time.get_ticks()
+
+IDLE_INTRO_TIME = 10000
+
+idle_intro = True
+idle_later = False
+
+
+# ==================================================
+# CHARACTER JUMP ANIMATION
+# ==================================================
+
+jump_frames = []
+
+for i in range(0, 8):
+
+    image = pygame.image.load(
+        f"assets/Character/jump/{i:02d}.png"
+    ).convert_alpha()
+
+    image = pygame.transform.scale(image, (170, 170))
+
+    jump_frames.append(image)
+
+
+jump_frame = 0
+
+jump_animation_speed = 80
+
+last_jump_update = pygame.time.get_ticks()
+
+jumping = False
+
+
+# ==================================================
+# RUNNING LEFT ANIMATION
+# ==================================================
+
+running_left_frames = []
+
+for i in range(0, 8):
+
+    image = pygame.image.load(
+        f"assets/Character/running_left/{i:02d}.png"
+    ).convert_alpha()
+
+    image = pygame.transform.scale(image, (170, 170))
+
+    running_left_frames.append(image)
+
+
+# ==================================================
+# RUNNING RIGHT ANIMATION
+# ==================================================
+
+running_right_frames = []
+
+for i in range(0, 8):
+
+    image = pygame.image.load(
+        f"assets/Character/running_right/{i:02d}.png"
+    ).convert_alpha()
+
+    image = pygame.transform.scale(image, (170, 170))
+
+    running_right_frames.append(image)
+
+
+# Running animation settings
+
+run_frame = 0
+
+run_animation_speed = 100
+
+last_run_update = pygame.time.get_ticks()
+
+running_direction = None
 
 
 # ==================================================
@@ -62,8 +137,8 @@ last_update = pygame.time.get_ticks()
 player = pygame.Rect(
     100,
     0,
-    150,
-    150
+    170,
+    170
 )
 
 speed = 3
@@ -106,6 +181,24 @@ while running:
         if event.type == pygame.QUIT:
             running = False
 
+        # SPACE = JUMP
+
+        if event.type == pygame.KEYDOWN:
+
+            if event.key == pygame.K_SPACE:
+
+                if on_ground and not jumping:
+
+                    velocity_y = jump_strength
+
+                    on_ground = False
+
+                    jumping = True
+
+                    jump_frame = 0
+
+                    last_jump_update = pygame.time.get_ticks()
+
 
     # ==================================================
     # GET CURRENT WINDOW SIZE
@@ -118,9 +211,6 @@ while running:
     # ==================================================
     # SCALE BACKGROUND
     # ==================================================
-
-    # Make the background tall enough to fill
-    # the current window.
 
     scale = (
         screen_height * ZOOM
@@ -137,10 +227,7 @@ while running:
 
     background = pygame.transform.scale(
         original_background,
-        (
-            background_width,
-            background_height
-        )
+        (background_width, background_height)
     )
 
 
@@ -150,24 +237,23 @@ while running:
 
     keys = pygame.key.get_pressed()
 
-    if keys[pygame.K_RIGHT]:
+    running_direction = None
 
-        player.x += speed
+    # Q = RUN LEFT
 
-    if keys[pygame.K_LEFT]:
+    if keys[pygame.K_q]:
 
         player.x -= speed
 
+        running_direction = "left"
 
-    # ==================================================
-    # JUMP
-    # ==================================================
+    # D = RUN RIGHT
 
-    if keys[pygame.K_SPACE] and on_ground:
+    elif keys[pygame.K_d]:
 
-        velocity_y = jump_strength
+        player.x += speed
 
-        on_ground = False
+        running_direction = "right"
 
 
     # ==================================================
@@ -183,9 +269,6 @@ while running:
     # GROUND COLLISION
     # ==================================================
 
-    # The road is approximately here.
-    # Adjust this number if necessary.
-
     GROUND_Y = int(screen_height * 0.73)
 
     if player.bottom >= GROUND_Y:
@@ -196,6 +279,8 @@ while running:
 
         on_ground = True
 
+        jumping = False
+
     else:
 
         on_ground = False
@@ -205,18 +290,11 @@ while running:
     # CAMERA
     # ==================================================
 
-    # Character stays around this position
-    # while the world moves.
-
     camera_x = player.x - 250
-
 
     if camera_x < 0:
 
         camera_x = 0
-
-
-    # Don't scroll beyond the background
 
     max_camera = background_width - screen_width
 
@@ -230,30 +308,102 @@ while running:
 
 
     # ==================================================
+    # JUMP ANIMATION
+    # ==================================================
+
+    if jumping:
+
+        now = pygame.time.get_ticks()
+
+        if now - last_jump_update >= jump_animation_speed:
+
+            jump_frame += 1
+
+            last_jump_update = now
+
+            if jump_frame >= len(jump_frames):
+
+                jump_frame = len(jump_frames) - 1
+
+
+    # ==================================================
+    # RUNNING ANIMATION
+    # ==================================================
+
+    if running_direction is not None and not jumping:
+
+        now = pygame.time.get_ticks()
+
+        if now - last_run_update >= run_animation_speed:
+
+            run_frame += 1
+
+            if run_frame >= 8:
+
+                run_frame = 0
+
+            last_run_update = now
+
+
+    # ==================================================
     # IDLE ANIMATION
     # ==================================================
 
-    now = pygame.time.get_ticks()
+    if not jumping and running_direction is None:
 
-    if now - last_update > animation_speed:
+        now = pygame.time.get_ticks()
 
-        current_frame += 1
+        # PHASE 1: FRAMES 00-04
 
-        if current_frame >= len(idle_frames):
+        if idle_intro:
 
-            current_frame = 0
+            if now - idle_intro_start >= IDLE_INTRO_TIME:
 
-        last_update = now
+                idle_intro = False
+
+                idle_later = True
+
+                current_frame = 5
+
+                last_update = now
+
+            else:
+
+                if now - last_update >= animation_speed:
+
+                    current_frame += 1
+
+                    if current_frame > 4:
+
+                        current_frame = 0
+
+                    last_update = now
+
+
+        # PHASE 2: FRAMES 05-09
+
+        elif idle_later:
+
+            if now - last_update >= animation_speed:
+
+                current_frame += 1
+
+                if current_frame >= 10:
+
+                    current_frame = 0
+
+                    idle_intro = True
+
+                    idle_later = False
+
+                    idle_intro_start = now
+
+                last_update = now
 
 
     # ==================================================
     # DRAW BACKGROUND
     # ==================================================
-
-    # Align the bottom of the background with
-    # the bottom of the window.
-    #
-    # This prevents the black bar.
 
     background_y = screen_height - background_height
 
@@ -269,13 +419,44 @@ while running:
 
     player_screen_x = player.x - camera_x
 
-    screen.blit(
-        idle_frames[current_frame],
-        (
-            player_screen_x,
-            player.y
+    # JUMP HAS HIGHEST PRIORITY
+
+    if jumping:
+
+        screen.blit(
+            jump_frames[jump_frame],
+            (player_screen_x, player.y)
         )
-    )
+
+
+    # RUN LEFT
+
+    elif running_direction == "left":
+
+        screen.blit(
+            running_left_frames[run_frame],
+            (player_screen_x, player.y)
+        )
+
+
+    # RUN RIGHT
+
+    elif running_direction == "right":
+
+        screen.blit(
+            running_right_frames[run_frame],
+            (player_screen_x, player.y)
+        )
+
+
+    # IDLE
+
+    else:
+
+        screen.blit(
+            idle_frames[current_frame],
+            (player_screen_x, player.y)
+        )
 
 
     # ==================================================
