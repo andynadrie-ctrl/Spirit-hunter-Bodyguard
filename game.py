@@ -31,7 +31,7 @@ ZOOM = 1.5
 
 idle_frames = []
 
-for i in range(0, 10):
+for i in range(10):
 
     image = pygame.image.load(
         f"assets/Character/idle/{i:02d}.png"
@@ -45,11 +45,6 @@ for i in range(0, 10):
 current_frame = 0
 animation_speed = 150
 last_update = pygame.time.get_ticks()
-
-
-# ==================================================
-# IDLE ANIMATION TIMING
-# ==================================================
 
 idle_intro_start = pygame.time.get_ticks()
 
@@ -65,7 +60,7 @@ idle_later = False
 
 jump_frames = []
 
-for i in range(0, 8):
+for i in range(8):
 
     image = pygame.image.load(
         f"assets/Character/jump/{i:02d}.png"
@@ -77,9 +72,7 @@ for i in range(0, 8):
 
 
 jump_frame = 0
-
 jump_animation_speed = 80
-
 last_jump_update = pygame.time.get_ticks()
 
 jumping = False
@@ -91,7 +84,7 @@ jumping = False
 
 running_left_frames = []
 
-for i in range(0, 8):
+for i in range(8):
 
     image = pygame.image.load(
         f"assets/Character/running_left/{i:02d}.png"
@@ -108,7 +101,7 @@ for i in range(0, 8):
 
 running_right_frames = []
 
-for i in range(0, 8):
+for i in range(8):
 
     image = pygame.image.load(
         f"assets/Character/running_right/{i:02d}.png"
@@ -119,15 +112,97 @@ for i in range(0, 8):
     running_right_frames.append(image)
 
 
-# Running animation settings
-
 run_frame = 0
-
 run_animation_speed = 100
-
 last_run_update = pygame.time.get_ticks()
 
 running_direction = None
+
+
+# ==================================================
+# DODGE LEFT ANIMATION
+# ==================================================
+
+dodge_left_frames = []
+
+for i in range(7):
+
+    image = pygame.image.load(
+        f"assets/Character/dodge_left/{i:02d}.png"
+    ).convert_alpha()
+
+    image = pygame.transform.scale(image, (170, 170))
+
+    dodge_left_frames.append(image)
+
+
+# ==================================================
+# DODGE RIGHT ANIMATION
+# ==================================================
+
+dodge_right_frames = []
+
+for i in range(7):
+
+    image = pygame.image.load(
+        f"assets/Character/dodge_right/{i:02d}.png"
+    ).convert_alpha()
+
+    image = pygame.transform.scale(image, (170, 170))
+
+    dodge_right_frames.append(image)
+
+
+# Dodge settings
+
+dodge_frame = 0
+
+dodge_animation_speed = 50
+
+last_dodge_update = pygame.time.get_ticks()
+
+dodging = False
+
+dodge_direction = None
+
+dodge_speed = 12
+
+dodge_distance = 0
+
+max_dodge_distance = 120
+
+DODGE_COOLDOWN = 700
+
+last_dodge_time = 0
+
+
+# ==================================================
+# BLOCK ANIMATIONS
+# ==================================================
+
+block_left = pygame.image.load(
+    "assets/Character/block_left/00.png"
+).convert_alpha()
+
+block_left = pygame.transform.scale(
+    block_left, (170, 170)
+)
+
+
+block_right = pygame.image.load(
+    "assets/Character/block_right/00.png"
+).convert_alpha()
+
+block_right = pygame.transform.scale(
+    block_right, (170, 170)
+)
+
+
+# Block settings
+
+blocking = False
+
+block_direction = None
 
 
 # ==================================================
@@ -170,6 +245,8 @@ camera_x = 0
 
 running = True
 
+clock = pygame.time.Clock()
+
 while running:
 
     # ==================================================
@@ -179,15 +256,24 @@ while running:
     for event in pygame.event.get():
 
         if event.type == pygame.QUIT:
+
             running = False
 
-        # SPACE = JUMP
 
         if event.type == pygame.KEYDOWN:
 
+            # SPACE = JUMP
+
             if event.key == pygame.K_SPACE:
 
-                if on_ground and not jumping:
+                keys = pygame.key.get_pressed()
+
+                if (
+                    on_ground
+                    and not jumping
+                    and not dodging
+                    and not keys[pygame.K_s]
+                ):
 
                     velocity_y = jump_strength
 
@@ -200,11 +286,53 @@ while running:
                     last_jump_update = pygame.time.get_ticks()
 
 
+            # J = DODGE WITH DIRECTION
+
+            if event.key == pygame.K_j:
+
+                keys = pygame.key.get_pressed()
+
+                now = pygame.time.get_ticks()
+
+                if (
+                    not dodging
+                    and on_ground
+                    and not jumping
+                    and not keys[pygame.K_s]
+                    and now - last_dodge_time >= DODGE_COOLDOWN
+                ):
+
+                    if keys[pygame.K_q]:
+
+                        dodging = True
+
+                        dodge_direction = "left"
+
+
+                    elif keys[pygame.K_d]:
+
+                        dodging = True
+
+                        dodge_direction = "right"
+
+
+                    if dodging:
+
+                        dodge_frame = 0
+
+                        dodge_distance = 0
+
+                        last_dodge_update = now
+
+                        last_dodge_time = now
+
+
     # ==================================================
-    # GET CURRENT WINDOW SIZE
+    # WINDOW SIZE
     # ==================================================
 
     screen_width = screen.get_width()
+
     screen_height = screen.get_height()
 
 
@@ -232,28 +360,83 @@ while running:
 
 
     # ==================================================
-    # PLAYER MOVEMENT
+    # PLAYER INPUT
     # ==================================================
 
     keys = pygame.key.get_pressed()
 
     running_direction = None
 
-    # Q = RUN LEFT
+    blocking = False
 
-    if keys[pygame.K_q]:
+    block_direction = None
 
-        player.x -= speed
 
-        running_direction = "left"
+    # ==================================================
+    # BLOCK INPUT
+    # ==================================================
 
-    # D = RUN RIGHT
+    if not dodging and not jumping and on_ground and keys[pygame.K_s]:
 
-    elif keys[pygame.K_d]:
+        if keys[pygame.K_q]:
 
-        player.x += speed
+            blocking = True
 
-        running_direction = "right"
+            block_direction = "left"
+
+
+        elif keys[pygame.K_d]:
+
+            blocking = True
+
+            block_direction = "right"
+
+
+    # ==================================================
+    # DODGE MOVEMENT
+    # ==================================================
+
+    if dodging:
+
+        if dodge_direction == "left":
+
+            player.x -= dodge_speed
+
+        elif dodge_direction == "right":
+
+            player.x += dodge_speed
+
+        dodge_distance += dodge_speed
+
+        if dodge_distance >= max_dodge_distance:
+
+            dodging = False
+
+            dodge_direction = None
+
+
+    # ==================================================
+    # NORMAL MOVEMENT
+    # ==================================================
+
+    elif not blocking:
+
+        # Q = RUN LEFT
+
+        if keys[pygame.K_q]:
+
+            player.x -= speed
+
+            running_direction = "left"
+
+
+        # D = RUN RIGHT
+
+        elif keys[pygame.K_d]:
+
+            player.x += speed
+
+            running_direction = "right"
 
 
     # ==================================================
@@ -330,7 +513,12 @@ while running:
     # RUNNING ANIMATION
     # ==================================================
 
-    if running_direction is not None and not jumping:
+    if (
+        running_direction is not None
+        and not jumping
+        and not dodging
+        and not blocking
+    ):
 
         now = pygame.time.get_ticks()
 
@@ -346,10 +534,34 @@ while running:
 
 
     # ==================================================
+    # DODGE ANIMATION
+    # ==================================================
+
+    if dodging:
+
+        now = pygame.time.get_ticks()
+
+        if now - last_dodge_update >= dodge_animation_speed:
+
+            dodge_frame += 1
+
+            last_dodge_update = now
+
+            if dodge_frame >= 7:
+
+                dodge_frame = 6
+
+
+    # ==================================================
     # IDLE ANIMATION
     # ==================================================
 
-    if not jumping and running_direction is None:
+    if (
+        not jumping
+        and running_direction is None
+        and not dodging
+        and not blocking
+    ):
 
         now = pygame.time.get_ticks()
 
@@ -419,9 +631,48 @@ while running:
 
     player_screen_x = player.x - camera_x
 
-    # JUMP HAS HIGHEST PRIORITY
 
-    if jumping:
+    # DODGE
+
+    if dodging:
+
+        if dodge_direction == "left":
+
+            screen.blit(
+                dodge_left_frames[dodge_frame],
+                (player_screen_x, player.y)
+            )
+
+        elif dodge_direction == "right":
+
+            screen.blit(
+                dodge_right_frames[dodge_frame],
+                (player_screen_x, player.y)
+            )
+
+
+    # BLOCK
+
+    elif blocking:
+
+        if block_direction == "left":
+
+            screen.blit(
+                block_left,
+                (player_screen_x, player.y)
+            )
+
+        elif block_direction == "right":
+
+            screen.blit(
+                block_right,
+                (player_screen_x, player.y)
+            )
+
+
+    # JUMP
+
+    elif jumping:
 
         screen.blit(
             jump_frames[jump_frame],
@@ -464,6 +715,8 @@ while running:
     # ==================================================
 
     pygame.display.flip()
+
+    clock.tick(60)
 
 
 pygame.quit()
