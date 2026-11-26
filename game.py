@@ -2,6 +2,19 @@ import pygame
 
 pygame.init()
 
+# ==================================================
+# BACKGROUND MUSIC
+# ==================================================
+
+pygame.mixer.init()
+
+try:
+    pygame.mixer.music.load("assets/audio/Spirit_fight.mP3")
+    pygame.mixer.music.set_volume(0.5)  # Volume from 0.0 to 1.0
+    pygame.mixer.music.play(-1)         # -1 loops the music infinitely
+except pygame.error as e:
+    print("Could not load music:", e)
+
 WIDTH = 800
 HEIGHT = 600
 
@@ -159,6 +172,53 @@ block_direction = None
 
 
 # ==================================================
+# COMBO ATTACK ANIMATIONS (PUNCH 1 -> LEG 2)
+# ==================================================
+
+punch_left_frames = []
+for i in range(5):
+    image = pygame.image.load(
+        f"assets/Character/punch_1/Punch_left/{i:02d}.png"
+    ).convert_alpha()
+    image = pygame.transform.scale(image, (170, 170))
+    punch_left_frames.append(image)
+
+punch_right_frames = []
+for i in range(5):
+    image = pygame.image.load(
+        f"assets/Character/punch_1/punch_right/{i:02d}.png"
+    ).convert_alpha()
+    image = pygame.transform.scale(image, (170, 170))
+    punch_right_frames.append(image)
+
+leg_left_frames = []
+for i in range(4):
+    image = pygame.image.load(
+        f"assets/Character/punch_2/leg_left/{i:02d}.png"
+    ).convert_alpha()
+    image = pygame.transform.scale(image, (170, 170))
+    leg_left_frames.append(image)
+
+leg_right_frames = []
+for i in range(4):
+    image = pygame.image.load(
+        f"assets/Character/punch_2/leg_right/{i:02d}.png"
+    ).convert_alpha()
+    image = pygame.transform.scale(image, (170, 170))
+    leg_right_frames.append(image)
+
+attacking = False
+attack_step = 0          # 1 = punch_1, 2 = punch_2 (leg)
+combo_queued = False     # True when U is pressed again during punch_1
+attack_frame = 0
+attack_animation_speed = 65
+last_attack_update = pygame.time.get_ticks()
+
+punch_move_speed = 2     # Forward step speed during punch
+leg_move_speed = 3       # Forward step speed during leg kick
+
+
+# ==================================================
 # PLAYER
 # ==================================================
 
@@ -217,6 +277,7 @@ while running:
                     on_ground
                     and not jumping
                     and not dodging
+                    and not attacking
                     and not keys[pygame.K_s]
                 ):
                     velocity_y = jump_strength
@@ -225,7 +286,7 @@ while running:
                     jump_frame = 0
                     last_jump_update = pygame.time.get_ticks()
 
-            # J = DODGE WITH DIRECTION
+            # J = DODGE WITH DIRECTION (can cancel an attack)
             if event.key == pygame.K_j:
                 keys = pygame.key.get_pressed()
                 now = pygame.time.get_ticks()
@@ -247,10 +308,41 @@ while running:
                         facing = "right"
 
                     if dodging:
+                        attacking = False
+                        attack_step = 0
+                        combo_queued = False
                         dodge_frame = 0
                         dodge_distance = 0
                         last_dodge_update = now
                         last_dodge_time = now
+
+            # U = COMBO ATTACK (U -> PUNCH, U+U -> LEG)
+            if event.key == pygame.K_u:
+                keys = pygame.key.get_pressed()
+                now = pygame.time.get_ticks()
+
+                if (
+                    on_ground
+                    and not jumping
+                    and not dodging
+                    and not keys[pygame.K_s]
+                ):
+                    # First U: start punch_1
+                    if not attacking:
+                        if keys[pygame.K_q]:
+                            facing = "left"
+                        elif keys[pygame.K_d]:
+                            facing = "right"
+
+                        attacking = True
+                        attack_step = 1
+                        combo_queued = False
+                        attack_frame = 0
+                        last_attack_update = now
+
+                    # Second U during punch_1: queue punch_2 (leg)
+                    elif attack_step == 1:
+                        combo_queued = True
 
     # ==================================================
     # WINDOW SIZE
@@ -272,7 +364,13 @@ while running:
     # BLOCK INPUT
     # ==================================================
 
-    if not dodging and not jumping and on_ground and keys[pygame.K_s]:
+    if (
+        not dodging
+        and not jumping
+        and not attacking
+        and on_ground
+        and keys[pygame.K_s]
+    ):
         blocking = True
         if keys[pygame.K_q]:
             facing = "left"
@@ -295,6 +393,17 @@ while running:
         if dodge_distance >= max_dodge_distance:
             dodging = False
             dodge_direction = None
+
+    # ==================================================
+    # ATTACK FORWARD MOVEMENT
+    # ==================================================
+
+    elif attacking:
+        step_speed = punch_move_speed if attack_step == 1 else leg_move_speed
+        if facing == "left":
+            player.x -= step_speed
+        elif facing == "right":
+            player.x += step_speed
 
     # ==================================================
     # NORMAL MOVEMENT
@@ -360,6 +469,35 @@ while running:
 
     now = pygame.time.get_ticks()
 
+    # ATTACK COMBO ANIMATION
+    if attacking:
+        if now - last_attack_update >= attack_animation_speed:
+            attack_frame += 1
+            last_attack_update = now
+
+            # Punch 1 finished -> chain into Leg 2 if U was pressed again
+            if attack_step == 1 and attack_frame >= len(punch_right_frames):
+                if combo_queued:
+                    if keys[pygame.K_q]:
+                        facing = "left"
+                    elif keys[pygame.K_d]:
+                        facing = "right"
+
+                    attack_step = 2
+                    attack_frame = 0
+                    combo_queued = False
+                else:
+                    attacking = False
+                    attack_step = 0
+                    attack_frame = 0
+
+            # Leg 2 finished -> end combo
+            elif attack_step == 2 and attack_frame >= len(leg_right_frames):
+                attacking = False
+                attack_step = 0
+                attack_frame = 0
+                combo_queued = False
+
     # JUMP ANIMATION
     if jumping:
         if now - last_jump_update >= jump_animation_speed:
@@ -374,6 +512,7 @@ while running:
         and not jumping
         and not dodging
         and not blocking
+        and not attacking
     ):
         if now - last_run_update >= run_animation_speed:
             run_frame = (run_frame + 1) % len(running_right_frames)
@@ -393,6 +532,7 @@ while running:
         and running_direction is None
         and not dodging
         and not blocking
+        and not attacking
     )
 
     if is_idle:
@@ -420,7 +560,6 @@ while running:
                     idle_intro_start = now
                 last_update = now
     else:
-        # Reset idle cycle whenever the player performs an action
         idle_intro = True
         idle_later = False
         idle_intro_start = now
@@ -445,6 +584,14 @@ while running:
             screen.blit(dodge_left_frames[dodge_frame], (player_screen_x, player.y))
         elif dodge_direction == "right":
             screen.blit(dodge_right_frames[dodge_frame], (player_screen_x, player.y))
+
+    elif attacking:
+        if attack_step == 1:
+            frames = punch_left_frames if facing == "left" else punch_right_frames
+            screen.blit(frames[attack_frame], (player_screen_x, player.y))
+        elif attack_step == 2:
+            frames = leg_left_frames if facing == "left" else leg_right_frames
+            screen.blit(frames[attack_frame], (player_screen_x, player.y))
 
     elif blocking:
         if block_direction == "left":
