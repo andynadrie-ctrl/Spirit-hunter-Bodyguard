@@ -1,19 +1,56 @@
+import os
 import pygame
 
+pygame.mixer.pre_init(44100, -16, 2, 2048)
 pygame.init()
+pygame.mixer.init()
 
 # ==================================================
 # BACKGROUND MUSIC
 # ==================================================
 
-pygame.mixer.init()
+MUSIC_VOLUME = 0.5
+music_muted = False
 
-try:
-    pygame.mixer.music.load("assets/audio/Spirit_fight.mP3")
-    pygame.mixer.music.set_volume(0.5)  # Volume from 0.0 to 1.0
-    pygame.mixer.music.play(-1)         # -1 loops the music infinitely
-except pygame.error as e:
-    print("Could not load music:", e)
+
+def init_music():
+    audio_folder = os.path.join("assets", "audio")
+    supported_formats = (".ogg", ".wav", ".mp3")
+
+    if not os.path.isdir(audio_folder):
+        print("Folder 'assets/audio' not found.")
+        return
+
+    # Prioritize .ogg and .wav first, then .mp3
+    candidates = []
+    for ext in supported_formats:
+        for file in os.listdir(audio_folder):
+            lower = file.lower()
+            if lower.startswith("spirit_fight") and lower.endswith(ext):
+                candidates.append(os.path.join(audio_folder, file))
+
+    if not candidates:
+        print(
+            "Audio file not found in assets/audio/. "
+            "Convert spirit_fight to .ogg, .wav, or .mp3 and place it there."
+        )
+        return
+
+    for music_path in candidates:
+        try:
+            pygame.mixer.music.load(music_path)
+            pygame.mixer.music.set_volume(MUSIC_VOLUME)
+            pygame.mixer.music.play(-1)
+            print("Now playing:", music_path)
+            return
+        except pygame.error as e:
+            print(
+                f"Could not decode '{music_path}': {e}\n"
+                "Convert the audio properly to .ogg or .mp3 (renaming alone will not work)."
+            )
+
+
+init_music()
 
 WIDTH = 800
 HEIGHT = 600
@@ -211,8 +248,11 @@ attacking = False
 attack_step = 0          # 1 = punch_1, 2 = punch_2 (leg)
 combo_queued = False     # True when U is pressed again during punch_1
 attack_frame = 0
-attack_animation_speed = 65
+attack_animation_speed = 90
 last_attack_update = pygame.time.get_ticks()
+
+COMBO_GRACE_TIME = 400
+punch_end_time = 0
 
 punch_move_speed = 2     # Forward step speed during punch
 leg_move_speed = 3       # Forward step speed during leg kick
@@ -269,6 +309,11 @@ while running:
 
         if event.type == pygame.KEYDOWN:
 
+            # M = MUTE / UNMUTE MUSIC
+            if event.key == pygame.K_m:
+                music_muted = not music_muted
+                pygame.mixer.music.set_volume(0.0 if music_muted else MUSIC_VOLUME)
+
             # SPACE = JUMP
             if event.key == pygame.K_SPACE:
                 keys = pygame.key.get_pressed()
@@ -311,13 +356,14 @@ while running:
                         attacking = False
                         attack_step = 0
                         combo_queued = False
+                        punch_end_time = 0
                         dodge_frame = 0
                         dodge_distance = 0
                         last_dodge_update = now
                         last_dodge_time = now
 
             # U = COMBO ATTACK (U -> PUNCH, U+U -> LEG)
-            if event.key == pygame.K_u:
+            if event.key == pygame.K_u or event.unicode.lower() == "u":
                 keys = pygame.key.get_pressed()
                 now = pygame.time.get_ticks()
 
@@ -327,13 +373,22 @@ while running:
                     and not dodging
                     and not keys[pygame.K_s]
                 ):
-                    # First U: start punch_1
-                    if not attacking:
-                        if keys[pygame.K_q]:
-                            facing = "left"
-                        elif keys[pygame.K_d]:
-                            facing = "right"
+                    if keys[pygame.K_q]:
+                        facing = "left"
+                    elif keys[pygame.K_d]:
+                        facing = "right"
 
+                    # Trigger leg immediately if U is pressed right after punch_1
+                    if not attacking and (now - punch_end_time <= COMBO_GRACE_TIME):
+                        attacking = True
+                        attack_step = 2
+                        combo_queued = False
+                        attack_frame = 0
+                        last_attack_update = now
+                        punch_end_time = 0
+
+                    # First U: start punch_1
+                    elif not attacking:
                         attacking = True
                         attack_step = 1
                         combo_queued = False
@@ -490,6 +545,7 @@ while running:
                     attacking = False
                     attack_step = 0
                     attack_frame = 0
+                    punch_end_time = now
 
             # Leg 2 finished -> end combo
             elif attack_step == 2 and attack_frame >= len(leg_right_frames):
@@ -497,6 +553,7 @@ while running:
                 attack_step = 0
                 attack_frame = 0
                 combo_queued = False
+                punch_end_time = 0
 
     # JUMP ANIMATION
     if jumping:
@@ -618,4 +675,5 @@ while running:
     pygame.display.flip()
     clock.tick(60)
 
+pygame.mixer.music.stop()
 pygame.quit()
